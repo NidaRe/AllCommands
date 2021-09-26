@@ -1,0 +1,47 @@
+#Get host endpoints
+calicoctl get hostEndpoint
+calicoctl get hostEndpoint --output=wide
+calicoctl get hostEndpoint --output=yaml
+
+
+IPAM
+# Generate a report using the check command
+calicoctl ipam check -o report.json
+
+#Release any unnecessary addresses
+calicoctl ipam release --from-report report.json
+
+#Unlock the data store
+calicoctl datastore migrate unlock
+
+#Print the information associated with an IP address.
+calicoctl ipam show --ip=192.168.1.2
+
+# Print a summary of IP usage.
+calicoctl ipam show
+
+# Print more detailed IP usage by blocks.
+calicoctl ipam show --show-blocks
+
+# Print more detailed information about borrowed IP addresses.
+calicoctl ipam show --show-borrowed
+
+# Print current IPAM configuration.
+calicoctl ipam show --show-configuration
+
+# NODE STATUS
+Check the status of a Calico instance.
+calicoctl node status
+
+# Collect Node Diagnostics
+calicoctl node diags
+https://docs.projectcalico.org/reference/calicoctl/node/diags
+
+# calicoctl node checksystem
+calicoctl node checksystem
+
+
+DATA STORE
+#Export the contents of an etcdv3 datastore to a file named etcd-migration.
+calicoctl datastore migrate export > etcd-migration
+

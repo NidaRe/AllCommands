@@ -1,0 +1,167 @@
+# Show all interfaces
+
+ip addr
+
+# Show veth sets
+
+ip link show type veth
+
+# Show  ip-inIP
+ip link show ipip
+
+# Get route to pod with IP xx.xx.xx.xx
+
+ip route get <POD_IP>
+
+=======
+Check free memory and swap space
+free -m
+
+==
+iperf3 -c IP_ADDRESS -R
+iperf3 -c IP_ADDRESS 
+
+ip route and ip addr in pod, pod name: pod-10-2
+
+root@pod-10-2:/# ip r
+default via 169.254.1.1 dev eth0
+169.254.1.1 dev eth0  scope link
+root@pod-10-2:/# ip addr
+
+calicoctl get ipPool default-ipv4-ippool -o yaml
+
+# Enable encryption using wireguard
+calicoctl patch felixconfiguration default --type='merge' -p '{"spec":{"wireguardEnabled":true}}'
+
+# Switch off wireguard encryption
+calicoctl patch felixconfiguration default --type='merge' -p '{"spec":{"wireguardEnabled":false}}'
+
+# Check node status
+calicoctl get node node1 -o yaml
+
+# Grep interface for wireguard
+ip addr | grep wireguard
+
+Example output:
+
+10: wireguard.cali: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1400 qdisc noqueue state UNKNOWN group default qlen 1000
+    inet 198.19.22.131/32 brd 198.19.22.131 scope global wireg
+
+# There are two address ranges that Kubernetes is normally configured with that are worth understanding:
+
+The cluster pod CIDR is the range of IP addresses Kubernetes is expecting to be assigned to pods in the cluster.
+The services CIDR is the range of IP addresses that are used for the Cluster IPs of Kubernetes Sevices (the virtual IP that corresponds to each Kubernetes Service).
+
+kubectl cluster-info dump | grep -m 2 -E "service-cidr|cluster-cidr"
+
+# Check calico IP pools
+calicoctl get ippools
+
+#Check Calico IPAM allocations statistics: calicoctl ipam show
+
+
+# Node Status
+ calicoctl node status
+
+# Check external nodeIP status
+kubectl get pods -n external-ns -o wide
+
+======
+
+#Exec into the pod
+Let's exec into the pod so we can see its local view of the network (the IP addresses, network interfaces, and the routing table within the pod).
+
+CUSTOMER_POD=$(kubectl get pods -n yaobank -l app=customer -o name)
+kubectl exec -ti -n yaobank $CUSTOMER_POD -- /bin/bash
+
+# Interface: ip addr
+# Interface IP link with '-c' color : ip -c link show up
+# Show Route: ip route
+
+#Get Pods, services and end points
+
+kubectl get svc -n <NAME_SPACE>
+kubectl get endpoints -n <NAME_SPACE>
+kubectl get pods -n <NAME_SPACE> -o wide
+kubectl get endpoints -n <NAME_SPACE> summary
+
+# Examine the KUBE-SERVICE chain
+sudo iptables -v --numeric --table nat --list KUBE-SERVICES
+sudo iptables -v --numeric --table nat --list KUBE-SERVICES | grep KUBE-NODEPORTS
+sudo iptables -v --numeric --table nat --list KUBE-NODEPORTS
+
+Each iptables chain consists of a list of rules that are executed in order until a rule matches. The key columns/elements to note in this output are:
+
+target - which chain iptables will jump to if the rule matches
+prot - the protocol match criteria
+source, and destination - the source and destination IP address match criteria
+the comments that kube-proxy includes
+the additional match criteria at the end of each rule - e.g dpt:80 that specifies the destination port match
+
+# KUBE-SERVICES -> KUBE-SVC-XXXXXXXXXXXXXXXX
+sudo iptables -v --numeric --table nat --list KUBE-SERVICES | grep -E summary
+
+=============
+Calico's eBPF dataplane is an alternative to the default standard Linux dataplane (which is iptables based). The eBPF dataplane has a number of advantages:
+
+It scales to higher throughput.
+It uses less CPU per GBit.
+It has native support for Kubernetes services (without needing kube-proxy) that:
+Reduces first packet latency for packets to services.
+Preserves external client source IP addresses all the way to the pod.
+Supports DSR (Direct Server Return) for more efficient service routing.
+Uses less CPU than kube-proxy to keep the dataplane in sync.
+The eBPF dataplane also has some limitations, which are described in the Enable the eBPF dataplane guide in the Calico documentation.
+======
+Note that if the cluster was configured to use an overlay (VXLAN or IPIP) or wireguard, then the SNAT would make the traffic appear to come from the IP address associated with the corresponding virtual interface on the ingress node.
+
+
+# disable kube proxy
+calicoctl patch felixconfiguration default --patch='{"spec": {"bpfKubeProxyIptablesCleanupEnabled": false}}'
+
+#Switch on eBPF mode
+calicoctl patch felixconfiguration default --patch='{"spec": {"bpfEnabled": true}}'
+
+# Direct Server Return (DSR)
+
+Snoop the traffic associated with the node port:
+
+sudo tcpdump -nvi any 'tcp port 30180'
+
+# Switch on DSR
+calicoctl patch felixconfiguration default --patch='{"spec": {"bpfExternalServiceMode": "DSR"}}'
+
+# BGP Configuration
+calicoctl get bgpconfig default -o yaml
+
+# Update BGP configuration
+calicoctl patch BGPConfig default --patch \
+   '{"spec": {"serviceExternalIPs": [{"cidr": "198.19.48.0/20"}]}}'
+
+# Assign the service external IP
+kubectl patch svc -n yaobank customer -p  '{"spec": {"externalIPs": ["198.19.48.10"]}}'
+
+# Get ip pools
+calicoctl get ippools
+
+
+# Node status
+calicoctl node status
+
+#
+We've covered five different ways for connecting to your pods from outside the cluster during this Module.
+
+Via a standard NodePort on a specific node. (This is how you connected to the YAO Bank web front end when you first deployed it.)
+Direct to the pod IP address by using externally routable IP Pools.
+Advertising the service cluster IP range. (And using ECMP to load balance across all nodes in the cluster.)
+Advertising individual cluster IPs. (Services with externalTrafficPolicy: Local, using ECMP to load balance only to the nodes hosting the pods backing the service.)
+Advertising service external-IPs. (So you can use service IP addresses outside of the cluster IP range.)
+
+======================
+There are two address ranges that Kubernetes is normally configured with that are worth understanding:
+
+The cluster pod CIDR is the range of IP addresses Kubernetes is expecting to be assigned to pods in the cluster.
+The services CIDR is the range of IP addresses that are used for the Cluster IPs of Kubernetes Sevices (the virtual IP that corresponds to each Kubernetes Service).
+These are configured at cluster creation time (e.g. as initial kubeadm configuration).
+
++ kubectl cluster-info dump | grep -m 2 -E "service-cidr|cluster-cidr"
